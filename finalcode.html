@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Queue Management System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px;
+        }
+       .container {
+            max-width: 1000px; margin: 0 auto; background: white;
+            border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden;
+        }
+       .header {
+            background: linear-gradient(135deg, #000000, #1a1a1a);
+            color: white; padding: 25px; text-align: center;
+        }
+       .header h1 { font-size: 2em; margin-bottom: 5px; }
+       .mode-toggle {
+            display: flex; background: #f1f5f9; padding: 10px; gap: 10px;
+        }
+       .mode-btn {
+            flex: 1; padding: 12px; border: none; border-radius: 8px; cursor: pointer;
+            font-weight: 600; background: #e2e8f0; color: #475569;
+        }
+       .mode-btn.active { background: #000000; color: white; }
+       .main { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; padding: 25px; }
+       .card {
+            background: #f8f9fa; padding: 20px; border-radius: 15px;
+        }
+       .card h2 { color: #000000; margin-bottom: 15px; font-size: 1.3em; }
+       .input-group { margin-bottom: 15px; }
+       .input-group label { display: block; font-weight: 600; margin-bottom: 6px; color: #333; }
+       .input-group input,.input-group select,.input-group textarea {
+            width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 15px;
+        }
+       .input-with-mic { display: flex; align-items: center; gap: 8px; }
+       .input-with-mic input,.input-with-mic textarea { flex: 1; }
+       .mic-btn {
+            background: #28a745; color: white; border: none; padding: 10px 12px;
+            border-radius: 8px; cursor: pointer;
+        }
+       .mic-btn.listening { background: #dc3545; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+       .btn {
+            background: linear-gradient(135deg, #000000, #1a1a1a); color: white;
+            border: none; padding: 12px; border-radius: 8px; font-weight: 600;
+            cursor: pointer; width: 100%; margin-top: 8px; font-size: 15px;
+        }
+       .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
+       .btn:disabled { background: #ccc; cursor: not-allowed; }
+       .btn-secondary { background: #1e40af; }
+       .btn-green { background: #059669; }
+        #qrcode { text-align: center; margin: 15px 0; min-height: 260px; }
+        #qrcode canvas { border: 3px solid #000000; border-radius: 10px; }
+       .emergency {
+            background: red; color: white; padding: 8px; text-align: center;
+            margin-bottom: 10px; font-weight: bold;
+        }
+       .result {
+            background: #f0fdf4; padding: 15px; border-radius: 8px; margin-top: 10px;
+        }
+       .result p { margin: 8px 0; }
+       .result hr { margin: 10px 0; border: none; border-top: 1px solid #ddd; }
+       .hidden { display: none; }
+       .loader { display: none; text-align: center; color: #000000; font-weight: bold; margin: 10px 0; }
+       .token { background: #1e40af; color: white; padding: 8px; border-radius: 6px; text-align: center; margin: 10px 0; }
+       .wait-time { background: #fbbf24; color: #78350f; padding: 8px; border-radius: 6px; text-align: center; margin: 10px 0; font-weight: 600; }
+       .expiry-warning { background: #fef3c7; color: #92400e; padding: 8px; border-radius: 6px; text-align: center; margin: 10px 0; font-size: 13px; }
+       .staff-panel { background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 2px solid #ffc107; }
+        @media (max-width: 768px) {.main { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Smart Queue Management System</h1>
+            <p>Voice-to-QR + Direct Doctor View | Hackathon 2026</p>
+        </div>
+
+        <div class="mode-toggle">
+            <button class="mode-btn active" onclick="switchMode('qr')">📱 QR Mode</button>
+            <button class="mode-btn" onclick="switchMode('direct')">👨‍⚕️ Direct Mode</button>
+        </div>
+
+        <div class="main">
+            <!-- PATIENT INPUT -->
+            <div class="card">
+                <h2>👨‍⚕️ Patient Entry</h2>
+                <div class="input-group">
+                    <label>Name:</label>
+                    <div class="input-with-mic">
+                        <input type="text" id="name" placeholder="Speak or type patient name">
+                        <button class="mic-btn" onclick="startListening('name')">🎤</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Age:</label>
+                    <input type="number" id="age" placeholder="Enter age">
+                </div>
+                <div class="input-group">
+                    <label>Phone:</label>
+                    <input type="tel" id="phone" placeholder="Enter 10-digit mobile number">
+                </div>
+                <div class="input-group">
+                    <label>Spoken Language:</label>
+                    <select id="lang">
+                        <option value="en">English</option>
+                        <option value="hi">Hindi - हिंदी</option>
+                        <option value="kn">Kannada - ಕನ್ನಡ</option>
+                        <option value="ta">Tamil - தமிழ்</option>
+                        <option value="te">Telugu - తెలుగు</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Symptoms:</label>
+                    <div class="input-with-mic">
+                        <textarea id="symptoms" rows="3" placeholder="Describe the problem or symptoms"></textarea>
+                        <button class="mic-btn" onclick="startListening('symptoms')">🎤</button>
+                    </div>
+                </div>
+                <label><input type="checkbox" id="isEmergency"> Mark as Emergency</label>
+                <button class="btn" id="submitBtn" onclick="processPatient()">🚀 Submit Patient</button>
+                <div class="loader" id="loader">⏳ Translating to English...</div>
+            </div>
+
+            <!-- OUTPUT SECTION -->
+            <div class="card">
+                <h2 id="outputTitle">📱 QR Code</h2>
+                <div id="tokenDisplay" class="token hidden"></div>
+                <div id="waitTimeDisplay" class="wait-time hidden"></div>
+                <div id="expiryDisplay" class="expiry-warning hidden"></div>
+
+                <!-- QR MODE -->
+                <div id="qrSection">
+                    <div id="qrcode"></div>
+                    <button class="btn btn-secondary hidden" id="decodeBtn" onclick="decodeQR()">🔍 Decode Data</button>
+                    <button class="btn btn-green hidden" id="whatsappBtn" onclick="shareWhatsApp()">📤 Share on WhatsApp</button>
+                </div>
+
+                <!-- DIRECT MODE -->
+                <div id="directSection" class="hidden">
+                    <div class="staff-panel">
+                        <label style="color:#856404; font-weight:600; display:block; margin-bottom:8px;">
+                            🏥 Staff Check-In Panel
+                        </label>
+                        <div style="display:flex; gap:8px;">
+                            <input type="tel" id="checkinPhone" placeholder="Enter patient phone to check-in" style="flex:1;">
+                            <button class="btn btn-green" style="width:auto; margin:0;" onclick="checkInPatient()">
+                                ✅ Check-In
+                            </button>
+                        </div>
+                        <div id="checkinStatus" style="font-size:12px; margin-top:8px;"></div>
+                    </div>
+
+                    <div id="doctorResult"></div>
+                    <button class="btn btn-green" onclick="window.print()" style="margin-top:15px">🖨️ Print Token</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let recognition;
+        let currentMode = 'qr';
+        let currentQRData = '';
+        let tokenCounter = parseInt(localStorage.getItem('sherToken') || '0');
+        let patientQueue = JSON.parse(localStorage.getItem('sherQueue') || '[]');
+
+        // Auto-remove expired tokens every 30 seconds
+        setInterval(() => {
+            const now = Date.now();
+            const before = patientQueue.length;
+
+            patientQueue = patientQueue.filter(p => {
+                return p.checkedIn || now < p.expiresAt;
+            });
+
+            if (patientQueue.length!== before) {
+                localStorage.setItem('sherQueue', JSON.stringify(patientQueue));
+                console.log(`${before - patientQueue.length} expired tokens removed`);
+            }
+        }, 30000);
+
+        const emergencyKeywords = [
+            'pain', 'breath', 'bleeding', 'chest', 'heart', 'unconscious', 'accident', 'critical', 'serious',
+            'dard', 'saans', 'khoon', 'seene', 'behoshi', 'gir', 'dil', 'chakkar', // Hindi
+            'nōvu', 'ushu', 'usiru', 'ede', 'hr̥daya', 'raktasrāva', 'pramāda', // Kannada
+            'vali', 'mūccu', 'neñcu', 'irutaya', 'vativu', 'avacara', // Tamil
+            'nōppī', 'ūpiri', 'chāti', 'hr̥dayaṁ', 'raktasrāvaṁ', // Telugu
+            'ocd', 'anxiety', 'panic', 'depression' // Mental Health
+        ];
+
+        const langCodeMap = {
+            'hi': 'hi-IN', 'en': 'en-IN', 'kn': 'kn-IN', 'ta': 'ta-IN', 'te': 'te-IN'
+        };
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (mode === 'qr') {
+                document.getElementById('outputTitle').textContent = '📱 QR Code';
+                document.getElementById('qrSection').classList.remove('hidden');
+                document.getElementById('directSection').classList.add('hidden');
+            } else {
+                document.getElementById('outputTitle').textContent = '👨‍⚕️ Doctor View (Auto Translated)';
+                document.getElementById('qrSection').classList.add('hidden');
+                document.getElementById('directSection').classList.remove('hidden');
+            }
+        }
+
+        function startListening(fieldId) {
+            if (!('webkitSpeechRecognition' in window)) {
+                alert('Use Chrome for voice input');
+                return;
+            }
+            recognition = new webkitSpeechRecognition();
+            const lang = document.getElementById('lang').value;
+            recognition.lang = langCodeMap[lang] || 'en-IN';
+            recognition.continuous = false;
+
+            const btn = event.target;
+            btn.classList.add('listening');
+            btn.textContent = '🔴';
+            recognition.start();
+
+            recognition.onresult = (e) => {
+                document.getElementById(fieldId).value = e.results[0][0].transcript;
+                btn.classList.remove('listening');
+                btn.textContent = '🎤';
+            };
+            recognition.onerror = () => {
+                btn.classList.remove('listening');
+                btn.textContent = '🎤';
+            };
+        }
+
+        function checkEmergency(text) {
+            const lower = text.toLowerCase();
+            return emergencyKeywords.some(k => lower.includes(k));
+        }
+
+        function calculateWaitTime(emergency) {
+            const today = new Date().toDateString();
+            const now = Date.now();
+
+            // Only count active tokens: not expired AND (checked in OR still within expiry)
+            const activeQueue = patientQueue.filter(p =>
+                new Date(p.timestamp).toDateString() === today &&
+                (p.checkedIn || now < p.expiresAt)
+            );
+
+            if (emergency) return 3;
+            const normalPatientsAhead = activeQueue.filter(p =>!p.emergency).length;
+            return (normalPatientsAhead + 1) * 7;
+        }
+
+        async function translateToEnglish(text, lang) {
+            if (lang === 'en' ||!text) return text;
+            try {
+                const controller = new AbortController();
+                setTimeout(() => controller.abort(), 4000);
+                const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${lang}|en`;
+                const res = await fetch(url, { signal: controller.signal });
+                const data = await res.json();
+                return data.responseStatus === 200? data.responseData.translatedText : text;
+            } catch {
+                return text;
+            }
+        }
+
+        async function processPatient() {
+            const name = document.getElementById('name').value.trim();
+            const age = document.getElementById('age').value;
+            const phone = document.getElementById('phone').value.trim();
+            const lang = document.getElementById('lang').value;
+            const symptoms = document.getElementById('symptoms').value.trim();
+            let emergency = document.getElementById('isEmergency').checked;
+
+            if (!name ||!symptoms ||!phone) {
+                alert('Please fill name, phone and symptoms');
+                return;
+            }
+
+            if (phone.length!== 10) {
+                alert('Please enter valid 10-digit mobile number');
+                return;
+            }
+
+            const btn = document.getElementById('submitBtn');
+            const loader = document.getElementById('loader');
+            btn.disabled = true;
+            loader.style.display = 'block';
+
+            const english = await translateToEnglish(symptoms, lang);
+            emergency = emergency || checkEmergency(symptoms + ' ' + english);
+
+            tokenCounter++;
+            localStorage.setItem('sherToken', tokenCounter);
+            const token = emergency? 'P0-EMERGENCY' : 'P' + tokenCounter;
+
+            const patientData = {
+                id: 'SQMS' + Date.now(),
+                name: name,
+                age: age,
+                phone: phone,
+                lang: lang,
+                symptoms: symptoms,
+                english: english,
+                emergency: emergency,
+                timestamp: new Date().toLocaleString('en-IN'),
+                token: token
+            };
+
+            patientQueue.push({
+                id: patientData.id,
+                name: name,
+                phone: phone,
+                token: token,
+                emergency: emergency,
+                timestamp: new Date(),
+                checkedIn: false,
+                expiresAt: Date.now() + 30*60*1000 // 30 minutes
+            });
+            localStorage.setItem('sherQueue', JSON.stringify(patientQueue));
+
+            const waitTime = calculateWaitTime(emergency);
+
+            const qrData = {
+                id: patientData.id,
+                n: name, a: age, p: phone, l: lang,
+                so: symptoms, se: english,
+                e: emergency, t: patientData.timestamp,
+                token: token, w: waitTime,
+                exp: new Date(Date.now() + 30*60*1000).toLocaleTimeString('en-IN')
+            };
+            currentQRData = JSON.stringify(qrData);
+
+            document.getElementById('tokenDisplay').textContent = `Token: ${token}`;
+            document.getElementById('tokenDisplay').classList.remove('hidden');
+            document.getElementById('waitTimeDisplay').textContent = `⏱️ Expected Wait: ~${waitTime} mins`;
+            document.getElementById('waitTimeDisplay').classList.remove('hidden');
+
+            const expiryTime = new Date(Date.now() + 30*60*1000).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('expiryDisplay').textContent = `⚠️ Token expires at ${expiryTime} unless checked in by staff`;
+            document.getElementById('expiryDisplay').classList.remove('hidden');
+
+            if (currentMode === 'qr') {
+                generateQR();
+            } else {
+                showDoctorView({...patientData, waitTime: waitTime});
+            }
+
+            btn.disabled = false;
+            loader.style.display = 'none';
+        }
+
+        function generateQR() {
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '<canvas id="qr-canvas"></canvas>';
+            try {
+                new QRious({
+                    element: document.getElementById('qr-canvas'),
+                    value: currentQRData,
+                    size: 256,
+                    foreground: '#000000',
+                    background: '#FFFFFF',
+                    level: 'H'
+                });
+                document.getElementById('decodeBtn').classList.remove('hidden');
+                document.getElementById('whatsappBtn').classList.remove('hidden');
+            } catch (e) {
+                qrContainer.innerHTML = '<p style="color:red">QR Error</p>';
+            }
+        }
+
+        function showDoctorView(data) {
+            document.getElementById('doctorResult').innerHTML = `
+                ${data.emergency? '<div class="emergency">⚠️ EMERGENCY CASE</div>' : ''}
+                <div class="result">
+                    <p><b>Name:</b> ${data.name}</p>
+                    <p><b>Phone:</b> ${data.phone}</p>
+                    <hr>
+                    <p><b>Original:</b> ${data.symptoms}</p>
+                    <p><b>English:</b> ${data.english}</p>
+                    <hr>
+                    <p><b>Status:</b> ${data.emergency? "🔴 Emergency" : "🟢 Normal"}</p>
+                    <p><b>Expected Wait:</b> ~${data.waitTime} mins</p>
+                    <p><b>Time:</b> ${data.timestamp}</p>
+                </div>
+            `;
+        }
+
+        function checkInPatient() {
+            const phone = document.getElementById('checkinPhone').value.trim();
+            const status = document.getElementById('checkinStatus');
+
+            if (!phone || phone.length!== 10) {
+                status.textContent = '❌ Enter valid 10-digit phone number';
+                status.style.color = 'red';
+                return;
+            }
+
+            const today = new Date().toDateString();
+            const patientIndex = patientQueue.findIndex(p =>
+                p.phone === phone &&
+                new Date(p.timestamp).toDateString() === today &&
+               !p.checkedIn &&
+                Date.now() < p.expiresAt
+            );
+
+            if (patientIndex!== -1) {
+                patientQueue[patientIndex].checkedIn = true;
+                localStorage.setItem('sherQueue', JSON.stringify(patientQueue));
+
+                const p = patientQueue[patientIndex];
+                status.innerHTML = `✅ <b>${p.name}</b> checked in. Token: ${p.token} secured.`;
+                status.style.color = 'green';
+                document.getElementById('checkinPhone').value = '';
+            } else {
+                status.textContent = '❌ No active token found. May be expired or already checked in.';
+                status.style.color = 'red';
+            }
+        }
+
+        function decodeQR() {
+            if (!currentQRData) return;
+            const data = JSON.parse(currentQRData);
+            const fullData = {
+                name: data.n,
+                phone: data.p,
+                symptoms: data.so,
+                english: data.se,
+                emergency: data.e,
+                timestamp: data.t,
+                waitTime: data.w
+            };
+            showDoctorView(fullData);
+            switchMode('direct');
+            document.querySelectorAll('.mode-btn')[1].classList.add('active');
+            document.querySelectorAll('.mode-btn')[0].classList.remove('active');
+        }
+
+        function shareWhatsApp() {
+            const data = JSON.parse(currentQRData);
+            const text = `Smart Queue Token: ${data.token}%0AName: ${data.n}%0AWait Time: ~${data.w} mins%0AEmergency: ${data.e? 'YES' : 'No'}%0AExpires: ${data.exp}%0ASymptom: ${data.se}`;
+            window.open(`https://wa.me/?text=${text}`, '_blank');
+        }
+    </script>
+</body>
+</html>
